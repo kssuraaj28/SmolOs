@@ -2,12 +2,12 @@
 #include <mem/paging.h>
 #include <debug/panic.h>
 
-extern pd_entry_t __init_page_dir[];
 extern uint8_t __kernel_pma[];
 extern uint8_t __kernel_vma[];
 
+extern pd_entry_t _init_page_dir[];
+
 page_dir_t _page_dir;
-bool _is_identity_map = true; 
 
 page_table_t init_pt; 
 
@@ -51,4 +51,45 @@ void paging_init()
 
   asm volatile ("mov %[pdbr],%%cr3\n"::[pdbr]"r"(pd_phy));
   //free the old block?
+}
+
+void map_page(page_dir_t* pd, void* virt, uint32_t page_frame, enum PAGE_PDE_FLAGS pd_flags, enum PAGE_PTE_FLAGS pt_flags)
+{
+  uint32_t virtual_address = (uint32_t)virt;
+
+  if (virtual_address % PAGE_SIZE) PANIC("Unaligned virtual address");
+  if (page_frame  & ~PTE_FRAME) PANIC("Unaligned physical address");
+
+	uint32_t pd_index = EXTRACT_PD_INDEX(virtual_address);
+  uint32_t pt_index = EXTRACT_PT_INDEX(virtual_address);
+
+	if (!(pd -> tables[pd_index] & PDE_PRESENT))
+	{
+    PANIC("Kernel mem allocator not present yet");
+	}
+  
+  pd -> tables[pd_index] |= pd_flags;
+
+  page_table_t* page_table = pd -> table_virt[pd_index];
+	page_table -> pages[pt_index] = (page_frame & PTE_FRAME) | pt_flags;
+	
+	invlpg(virt);
+}
+
+uint32_t free_page(page_dir_t* pd, void* virt)
+{
+  uint32_t va = (uint32_t)virt;
+
+	uint32_t pd_index = EXTRACT_PD_INDEX(va);
+  uint32_t pt_index = EXTRACT_PT_INDEX(va);
+
+  if (!pd -> tables[pd_index] & PDE_PRESENT) PANIC ("No entry present");
+
+  page_table_t* pt = pd -> table_virt[pd_index];
+
+  if (!pt -> pages[pt_index] & PTE_PRESENT) PANIC ("No entry present");
+
+  uint32_t block = pt -> pages[pt_index] & PTE_FRAME;
+  pt -> pages[pt_index] ^= PTE_PRESENT;
+  return block;
 }

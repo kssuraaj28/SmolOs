@@ -3,13 +3,15 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <mem/pfa.h>
 
 #define PT_ENTRY_COUNT 1024
 #define PD_ENTRY_COUNT 1024
 #define PAGE_SIZE 4096
 
 #define EXTRACT_PD_INDEX(x) (x>>22)
-#define EXTRACT_PT_INDEX(x) ((x>>12)&PT_ENTRY_COUNT)
+#define EXTRACT_PT_INDEX(x) ((x>>12)&0x3FF)
+
 
 enum PAGE_PTE_FLAGS {
     PTE_PRESENT		=	1,
@@ -54,6 +56,13 @@ typedef struct __attribute__((aligned(4096))) __attribute__((packed)) page_dir {
 extern page_dir_t _page_dir;
 extern bool _is_identity_map;
 
+#define MAP_K(x,y) (map_page(&_page_dir,x,y,PDE_PRESENT|PDE_WRITABLE,PTE_PRESENT|PTE_WRITABLE))
+#define FREE_K(x) (free_page_frame(free_page(&_page_dir,x)))
+
 void paging_init();
+void flush_tlb();
+void invlpg(void* addr);
+void map_page(page_dir_t* pd, void* virt, uint32_t page_frame, enum PAGE_PDE_FLAGS pd_flags, enum PAGE_PTE_FLAGS pt_flags);
+uint32_t free_page(page_dir_t* pd, void* virt);
 
 #endif

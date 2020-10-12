@@ -29,9 +29,11 @@ stack_bottom:
 stack_top:
 
 section .data
+global _is_identity_map
+_is_identity_map: db 1
 align 4096
-global __init_page_dir
-__init_page_dir:
+global _init_page_dir
+_init_page_dir:
     dd 0x00000083
     times(PDE_INDEX - 1) dd 0
     dd 0x00000083
@@ -42,7 +44,7 @@ section .text
 global _start
 _start:
     ; update page directory address, since eax and ebx is in use, have to use ecx or other register
-    mov ecx, (__init_page_dir - VM_BASE)
+    mov ecx, (_init_page_dir - VM_BASE)
     mov cr3, ecx
 
     ; Enable 4mb pages
