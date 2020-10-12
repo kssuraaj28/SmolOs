@@ -1,256 +1,90 @@
-/* A page frame allocator/ physical memory manager*/
+/* A page frame allocator (physical memory manager)*/
 
-#include<stdint.h> 
-#include<stdbool.h>
-#include<mem.h>
-#include<tty.h>
+#include <stdint.h> 
+#include <stdbool.h>
 
-// Constant definitions:
-#define MEM_SIZE 0x100000000			/**< Size of physical memory */
-#define PMMAP 0x1000				/**< Description here */
-#define KERNEL_P 0x100000			/**< Description here */ //TODO: Get all this from bootloader
-#define BLOCK_SIZE 4096				/**< Description here */
-#define BLOCK_SIZE_B 12				/**< Description here */
-#define BITS_PER_UINT32_B 5			/**< 32 Bits per int */
+#include <multiboot.h>
+#include <common.h>
+#include <mem/paging.h>
+#include <debug/qemu_print.h>
+#include <debug/panic.h>
 
+#define BLOCK_SIZE 4096
+#define UPPER_MEM 0x100000
+#define BLOCKS_PER_BUCKET (8 * sizeof(pfa_bucket_t))
+#define SIZE_PER_BUCKET (BLOCK_SIZE * BLOCKS_PER_BUCKET)
 
+#define BLOCK_NO(i) ((i-UPPER_MEM)/BLOCK_SIZE)
+#define SET_BIT(i) pfa_bitmap[i / BLOCKS_PER_BUCKET] = pfa_bitmap[i / BLOCKS_PER_BUCKET] | (1 << (i % BLOCKS_PER_BUCKET))
+#define CLEAR_BIT(i) pfa_bitmap[i / BLOCKS_PER_BUCKET] = pfa_bitmap[i / BLOCKS_PER_BUCKET] & (~(1 << (i % BLOCKS_PER_BUCKET)))
+#define IS_SET(i) ((pfa_bitmap[i / BLOCKS_PER_BUCKET] >> (i % BLOCKS_PER_BUCKET)) & 0x1)
 
+typedef uint8_t pfa_bucket_t;
 
-// Routines internal to object:
-static void pmmngr_toggle_range(uint32_t start,uint32_t end);
-static inline void pmmngr_toggle_block(uint32_t block_number);
-static inline uint32_t block_number(uint32_t address);
-static uint8_t get_lowest_bit(uint32_t hexinp);
-static uint8_t extract_bit(uint32_t hexinp,uint8_t bitnumber); 
+extern uint8_t __kernel_vma[];
+extern uint8_t __kernel_bss_end[];
 
-
-// Data structues and user defined data types:
-
-static uint32_t physical_memory_bitmap[MEM_SIZE>>(BLOCK_SIZE_B+BITS_PER_UINT32_B)]; 
-static uint32_t special_bitmap[KERNEL_P>>(BLOCK_SIZE_B+BITS_PER_UINT32_B)]; //A special bitmap that manages less than 1M
-
-/** E820 Memory Map entry */
-typedef struct mmap_entry
-{
-    uint32_t  startLo;
-    uint32_t  startHi;
-    uint32_t  sizeLo;
-    uint32_t  sizeHi;
-    uint32_t  type;
-    uint32_t  acpi_3_0;
-} mmap_entry_t;
+uint32_t pfa_bitmap_size;
+uint32_t _kernel_size;
+pfa_bucket_t* pfa_bitmap = __kernel_bss_end;
 
 
-// Function implementations:
-/** @brief Initializes the page frame allocator
- * @param mapentrycount
- * @return  
- * */
-void  pmmngr_init(uint32_t mapentrycount)   
+void pfa_init(multiboot_info_t* mbd)
 { 
-	mmap_entry_t* map_ptr= (mmap_entry_t*)PMMAP;
+  if (!_is_identity_map) PANIC("No identity map");
 
-	for (uint32_t i=0;i<MEM_SIZE>>(BLOCK_SIZE_B+BITS_PER_UINT32_B);i++)
-	       	physical_memory_bitmap[i] = 0xffffffff; //Make everything 1 -- Everything is occupied initially
-	for (uint32_t i=0;i<KERNEL_P>>(BLOCK_SIZE_B+BITS_PER_UINT32_B);i++)
-	       	special_bitmap[i] = 0xffffffff; //Make everything 1 -- Everything is occupied initially
-	for(uint32_t i=0;i<mapentrycount;i++)
-	{
-		if((map_ptr -> type == 1)&&(map_ptr -> startLo >= KERNEL_P) && !(map_ptr -> startHi))
-			pmmngr_toggle_range(map_ptr->startLo, map_ptr->startLo + map_ptr ->sizeLo);
-		map_ptr ++;
-	}
-	// 0 - 0x9F000 are usually free, I'll do a safe 0x20000 to 0x80000 of special page frames for stack and so on...??
-	for(uint32_t sp_address = 0x20000;sp_address<0x80000;sp_address += 8*sizeof(uint32_t)*BLOCK_SIZE)
-		special_bitmap[sp_address >> (BLOCK_SIZE_B+BITS_PER_UINT32_B)] = 0; //TODO: Don't hardcode this!!
-	
-	//Now we free the space occupied by the kernel and this memory manager :)
-	uint32_t kernel_start = (uint32_t)__begin;
-	uint32_t kernel_end = (uint32_t)__end;
-	pmmngr_toggle_range (KERNEL_P,KERNEL_P + kernel_end - kernel_start); //Although the bootloader maps 4M, we don't care?? about anthing that comes later.. That's just garbage?? I can test by writing to heap??
-//	pmmngr_toggle_range (KERNEL_P,KERNEL_P + KERNEL_MAPPED_SIZE);
+  if (!mbd -> flags & MULTIBOOT_INFO_MEMORY) PANIC("No mem info");
+
+  qemu_puts("\n\rLower memory: "); qemu_hex(mbd -> mem_lower * 1024);
+  qemu_puts("\n\rHigher memory: "); qemu_hex(mbd -> mem_upper * 1024);
+
+  uint32_t umem_size = mbd -> mem_upper * 1024;
+
+  pfa_bitmap_size = umem_size / (SIZE_PER_BUCKET);
+
+  _kernel_size =  (uint32_t)__kernel_bss_end - (uint32_t)__kernel_vma;
+  _kernel_size += pfa_bitmap_size;
+
+
+  qemu_puts("\n\rTotal Kernel size: "); qemu_hex(_kernel_size);
+  qemu_puts("\n\rpfa_bitmap size: "); qemu_hex(pfa_bitmap_size);
+
+  _kernel_size = (_kernel_size%SIZE_PER_BUCKET) ? ((_kernel_size/SIZE_PER_BUCKET)+1)*SIZE_PER_BUCKET : _kernel_size;
+  
+  memset(pfa_bitmap,0,pfa_bitmap_size);
+  memset(pfa_bitmap,~0,_kernel_size/SIZE_PER_BUCKET);
 }
-/** @brief Returns a physical page frame
- * 
- * @return Page frame address
- * */
-uint32_t pmmngr_allocate_block()
+
+uint32_t first_free_block()
 {
-	uint32_t address;
-	for( uint32_t i=0;i<MEM_SIZE/(BLOCK_SIZE*sizeof(uint32_t)*8);i++)
-		if (physical_memory_bitmap[i] < 0xffffffff)
-		{
-			uint8_t bit = get_lowest_bit(physical_memory_bitmap[i]);  //bit lies from 0 to 31
-				if(bit == 0xff) return 0;
-			address = (i << (BLOCK_SIZE_B+BITS_PER_UINT32_B)) + (bit << (BLOCK_SIZE_B));
-			pmmngr_toggle_block(block_number(address));
-			return address;
-		}
-	return 0;
+  for (uint32_t i=0; i<pfa_bitmap_size; i++)
+  {
+    if (pfa_bitmap[i] == (pfa_bucket_t)-1) continue;
+
+    uint32_t block_number = i * BLOCKS_PER_BUCKET;
+    pfa_bucket_t bucket = pfa_bitmap[i];
+    while(bucket & 1)
+    {
+      block_number++;
+      bucket >>= 1;
+    }
+    return block_number;
+  }
+  return (uint32_t)-1;
 }
 
-/** @brief Returns a special physical page frame
- * 
- * @return Page frame address
- * */
-uint32_t allocate_special_block()
+uint32_t alloc_page_frame()
 {
-	uint32_t address;
-	for (uint32_t i = 0; i< KERNEL_P/(BLOCK_SIZE*sizeof(uint32_t)*8);i++)
-	if (special_bitmap[i] < 0xffffffff)
-	{
-			uint8_t bit = get_lowest_bit(special_bitmap[i]);  //bit lies from 0 to 31
-				if(bit == 0xff) return 0;
-			address = (i << (BLOCK_SIZE_B+BITS_PER_UINT32_B)) + (bit << (BLOCK_SIZE_B));
-			special_bitmap[address >> (BLOCK_SIZE_B+BITS_PER_UINT32_B)] ^= (1ul << ((address>>BLOCK_SIZE_B) & 31)); //Toggling the bit 
-			return address;
-	}
-	return 0;
+  uint32_t block = first_free_block();
+  if (block == (uint32_t)-1) PANIC("No more blocks");
+
+  SET_BIT(block);
+	return (block * BLOCK_SIZE) + UPPER_MEM;
 }
-/** @brief Frees a special page
- * 
- * @return True/false
- * */
-bool free_special_block(uint32_t address)
+
+void free_page_frame(uint32_t address)
 {
-	if(address >= KERNEL_P || address % BLOCK_SIZE) return false;
-	uint32_t block = block_number((uint32_t)address);
-	uint32_t dword = block >> 5;
-	uint8_t offset = block % 32;
-	if(special_bitmap[dword]&(1<<offset)) return 0;
-	special_bitmap[block >> 5] ^= (1ul << (block & 31));
-	return true;
+	if(address % BLOCK_SIZE) PANIC("Unaligned address");
+  if(address < UPPER_MEM) PANIC("Low address");
+  CLEAR_BIT(BLOCK_NO(address));
 }
-/** @brief ...
- * @param address 
- * @return  
- * */
-bool pmmngr_free_block(uint32_t address)
-{
-	if((uint32_t)address % BLOCK_SIZE != 0) return 0;
-	uint32_t block = block_number((uint32_t)address);
-	uint32_t dword = block >> 5;
-	uint8_t offset = block % 32;
-	if(!extract_bit((uint32_t)(physical_memory_bitmap + dword),offset)) return 0;
-	pmmngr_toggle_block(block);
-	return 1;
-
-//	return 0;
-
-}
-
-
-/** @brief ...
- * 
- * @return  
- * */
-// Helper function implementations:
-/** @brief ...
- * @param hexinp
- * @return  
- * */
-static uint8_t get_lowest_bit(uint32_t hexinp)
-{
-	for(int i=0;i<32;i++)
-	{
-		if ((hexinp%2) == 0)
-			return i;
-		hexinp >>= 1;
-	}
-	return 0xff;
-}
-/** @brief ...
- * @param hexinp
- * @param bitnumber
- * @return  
- * */
-static inline uint8_t extract_bit(uint32_t hexinp,uint8_t bitnumber)  //bitnumber < 32
-{
-	return (hexinp >> bitnumber) & 1;
-}
-/** @brief ...
- * @param address
- * @return  
- * */
-static inline uint32_t block_number(uint32_t address)  //TODO: MACRO??
-{
-	return address >> BLOCK_SIZE_B;
-}
-/** @brief ...
- * @param block_number
- * @return  
- * */
-static inline void pmmngr_toggle_block(uint32_t block_number) 
-{
-	physical_memory_bitmap[block_number >> 5] ^= (1ul << (block_number & 31));
-}
-/** start and end are addresses**/
-/** @brief Toggles the bits for a specified range
- * @param start
- * @param end
- * @return  
- * */
-static void pmmngr_toggle_range(uint32_t start,uint32_t end)    //Optimize the crap out of this later
-{
-	if (start % BLOCK_SIZE != 0){start -= (start%BLOCK_SIZE_B);}
-	if (end % BLOCK_SIZE != 0){end -= (end%BLOCK_SIZE_B); end += BLOCK_SIZE;}
-	while((end - start) >= BLOCK_SIZE)
-	{
-		
-		if((end - start) >= 32* BLOCK_SIZE)
-		{
-			uint32_t* byte = (uint32_t*)(block_number(start) >> 3);
-			byte = (uint32_t*)((uint8_t*)byte +(uint32_t)physical_memory_bitmap);
-			*byte ^= 0xffffffff;
-			start += (BLOCK_SIZE<<5);
-			
-		}
-		else
-		{
-			pmmngr_toggle_block(block_number(start));
-			start += BLOCK_SIZE;
-		}
-	}
-}
-
-//	_lazy_byte = (uint32_t*)start;
-//static uint32_t* _lazy_byte;
-//	physical_memory_bitmap = h_end;   //Debug here!
-//	uint32_t kernel_block_count  = kernelsize >> SECTORS_PER_BLOCK_B;
-//
-//
-/*
-	printhex((uint32_t)physical_memory_bitmap);
-
-
-	for (int i = 0; i< mapentrycount ; i++)
-        {
-                monitor_puts("\nStarting address:"); printhex((map_ptr+i) -> startLo);
-                monitor_puts("\tSize: "); printhex((map_ptr+i) -> sizeLo);
-                monitor_puts("\tType:"); printhex((map_ptr+i) -> type);
-         }
-*/
-	
-	/*
-	mmap_entry_t* map_ptr= (mmap_entry_t*)PMMAP;
-	for( uint32_t i=0;i<_mapentrycount;i++)
-	{
-		if(((map_ptr->startLo) <= (uint32_t)address)&& (((uint32_t)address-map_ptr->startLo) < map_ptr->sizeLo))
-		{
-			if (map_ptr -> type ==1)
-			{
-
-				uint32_t block = block_number((uint32_t)address);
-				uint32_t dword = block >> 5;
-				uint8_t offset = block % 32;
-				if(extract_bit((uint32_t)(physical_memory_bitmap + dword),offset)) return 0;
-				pmmngr_toggle_block(block);
-				return 1;
-
-			}
-			else return 0;
-		}
-		map_ptr ++;
-	}
-	*/
-

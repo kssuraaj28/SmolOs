@@ -15,8 +15,12 @@ KERNEL_SOURCES :=  \
 entry.asm \
 kmain.c \
 desc_table/gdt.c \
+mem/pfa.c \
+mem/paging.c \
 driver/serial.c \
 debug/qemu_print.c \
+debug/panic.c \
+common/string.c \
 
 KERNEL_OBJS:= ${KERNEL_SOURCES:.c=.o} 
 KERNEL_OBJS:= ${KERNEL_OBJS:.asm=.o} 

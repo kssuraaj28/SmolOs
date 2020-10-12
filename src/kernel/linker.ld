@@ -25,6 +25,7 @@ __kernel_vma = 0xC0100000;
 		*(COMMON)
 		*(.bss)
 	}
+  __kernel_bss_end = .;
 
   /DISCARD/     : {     
         *(.eh_frame);
