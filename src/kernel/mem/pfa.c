@@ -35,8 +35,8 @@ void pfa_init(multiboot_info_t* mbd)
 
   if (!mbd -> flags & MULTIBOOT_INFO_MEMORY) PANIC("No mem info");
 
-  qemu_puts("\n\rLower memory: "); qemu_hex(mbd -> mem_lower * 1024);
-  qemu_puts("\n\rHigher memory: "); qemu_hex(mbd -> mem_upper * 1024);
+  qemu_puts("\n\rLower memory: "); QEMU_HEX(mbd -> mem_lower * 1024);
+  qemu_puts("\n\rHigher memory: "); QEMU_HEX(mbd -> mem_upper * 1024);
 
   uint32_t umem_size = mbd -> mem_upper * 1024;
 
@@ -46,8 +46,8 @@ void pfa_init(multiboot_info_t* mbd)
   _kernel_size += pfa_bitmap_size;
 
 
-  qemu_puts("\n\rTotal Kernel size: "); qemu_hex(_kernel_size);
-  qemu_puts("\n\rpfa_bitmap size: "); qemu_hex(pfa_bitmap_size);
+  qemu_puts("\n\rTotal Kernel size: "); QEMU_HEX(_kernel_size);
+  qemu_puts("\n\rpfa_bitmap size: "); QEMU_HEX(pfa_bitmap_size);
 
   _kernel_size = (_kernel_size%SIZE_PER_BUCKET) ? ((_kernel_size/SIZE_PER_BUCKET)+1)*SIZE_PER_BUCKET : _kernel_size;
   
