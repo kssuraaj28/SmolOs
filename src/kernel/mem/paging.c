@@ -50,7 +50,9 @@ void paging_init()
   uint32_t pd_phy = (uint32_t)&_page_dir - (virt - phy);
 
   asm volatile ("mov %[pdbr],%%cr3\n"::[pdbr]"r"(pd_phy));
-  //free the old block?
+
+  uint32_t old_pd_phy = (uint32_t)_init_page_dir - (virt - phy);
+  free_page_frame(old_pd_phy);
 }
 
 void map_page(page_dir_t* pd, void* virt, uint32_t page_frame, enum PAGE_PDE_FLAGS pd_flags, enum PAGE_PTE_FLAGS pt_flags)
@@ -78,18 +80,18 @@ void map_page(page_dir_t* pd, void* virt, uint32_t page_frame, enum PAGE_PDE_FLA
 
 uint32_t free_page(page_dir_t* pd, void* virt)
 {
-  uint32_t va = (uint32_t)virt;
+	uint32_t va = (uint32_t)virt;
 
 	uint32_t pd_index = EXTRACT_PD_INDEX(va);
-  uint32_t pt_index = EXTRACT_PT_INDEX(va);
+	uint32_t pt_index = EXTRACT_PT_INDEX(va);
 
-  if (!pd -> tables[pd_index] & PDE_PRESENT) PANIC ("No entry present");
+	if (!pd -> tables[pd_index] & PDE_PRESENT) PANIC ("No entry present");
 
-  page_table_t* pt = pd -> table_virt[pd_index];
+	page_table_t* pt = pd -> table_virt[pd_index];
 
-  if (!pt -> pages[pt_index] & PTE_PRESENT) PANIC ("No entry present");
+	if (!pt -> pages[pt_index] & PTE_PRESENT) PANIC ("No entry present");
 
-  uint32_t block = pt -> pages[pt_index] & PTE_FRAME;
-  pt -> pages[pt_index] ^= PTE_PRESENT;
-  return block;
+	uint32_t block = pt -> pages[pt_index] & PTE_FRAME;
+	pt -> pages[pt_index] ^= PTE_PRESENT;
+	return block;
 }

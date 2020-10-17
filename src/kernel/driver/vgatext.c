@@ -8,7 +8,7 @@
 #define COL 25
 #define VGA_TEXT 0xB8000
 
-char _vga_text_memory[80*25*2] __attribute__((aligned(PAGE_SIZE)));
+char _vga_text_memory[PAGE_SIZE] __attribute__((aligned(PAGE_SIZE)));
 
 static char current_color = 0xf8; 
 
@@ -53,7 +53,7 @@ void set_bg_color(enum vga_color c)
 
 void vga_init()
 {
-//  FREE_K(_vga_text_memory);
+  FREE_K(_vga_text_memory);
   MAP_K(_vga_text_memory,0xB8000);
   vga_clrscr();
 }
