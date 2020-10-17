@@ -15,10 +15,14 @@ KERNEL_SOURCES :=  \
 entry.asm \
 kmain.c \
 desc_table/gdt.c \
+desc_table/idt.c \
 mem/pfa.c \
 mem/paging.c \
+interrupt/generic.c \
+interrupt/intstub.asm \
 driver/serial.c \
 driver/vgatext.c \
+driver/pic.c \
 debug/qemu_print.c \
 debug/panic.c \
 common/string.c \

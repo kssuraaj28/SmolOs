@@ -53,6 +53,7 @@ void set_bg_color(enum vga_color c)
 
 void vga_init()
 {
+//  FREE_K(_vga_text_memory);
   MAP_K(_vga_text_memory,0xB8000);
   vga_clrscr();
 }
