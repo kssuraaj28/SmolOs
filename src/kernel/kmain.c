@@ -7,6 +7,7 @@
 #include <mem/paging.h>
 #include <driver/serial.h>
 #include <driver/vgatext.h>
+#include <driver/pit.h>
 #include <interrupt/generic.h>
 #include <debug/qemu_print.h>
 #include <debug/panic.h>
@@ -21,6 +22,8 @@ void kmain(multiboot_info_t* mbd, uint32_t magic)
   pfa_init(mbd);
   paging_init();
   vga_init();
+  pit_init();
   interrupt_init();
-  PANIC("We are done");
+  for(;;);
+//  PANIC("We are done");
 }

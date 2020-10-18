@@ -1,9 +1,12 @@
 #include <port_io.h>
+#include <debug/panic.h>
 #include <interrupt/generic.h>
 #define PIC1_COMMAND 0x20
 #define PIC2_COMMAND 0xA0
 #define PIC1_DATA 0x21
 #define PIC2_DATA 0xA1
+
+#define PIC_EOI 0x20
 
 void pic_init()
 {
@@ -35,11 +38,11 @@ void pic_init()
 	outportb(PIC1_DATA,0);
 	outportb(PIC2_DATA,0);
 }
-void send_EOI_master()
+void irq_ack(uint8_t irq_no)
 {
+	if (irq_no < IRQ_BASE) PANIC ("Wrong IRQ number!");
+
 	outportb(PIC1_COMMAND,0x20);
-}
-void send_EOI_slave()
-{
-	outportb(PIC2_COMMAND,0x20);
+	if (irq_no >= IRQ_BASE + IRQ8_CMOS_CLOCK)
+		outportb(PIC2_COMMAND,0x20);
 }

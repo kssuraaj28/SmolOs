@@ -30,8 +30,8 @@ typedef struct interrupt_frame {
 
 
 #define IRQ_BASE                0x20
-#define IRQ0_Timer              0x00
-#define IRQ1_Keyboard           0x01
+#define IRQ0_TIMER              0x00
+#define IRQ1_KEYBOARD           0x01
 #define IRQ2_CASCADE            0x02
 #define IRQ3_SERIAL_PORT2       0x03
 #define IRQ4_SERIAL_PORT1       0x04
@@ -51,5 +51,5 @@ typedef void (*specific_isr_t) (interrupt_frame_t *);
 extern specific_isr_t _spec_isr_table[];
 
 void interrupt_init();
+void register_interrupt_handler(uint8_t num, specific_isr_t handler);
 #endif
-

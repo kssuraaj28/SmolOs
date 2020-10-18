@@ -45,7 +45,7 @@ void interrupt_init()
 	install_idt_ir(47,IDT_DESC_BIT32|IDT_DESC_PRESENT,0x08,(uint32_t*)isr47);
 	
 	install_idt_ir(0x80,IDT_DESC_BIT32|IDT_DESC_PRESENT|IDT_DESC_RING3|IDT_DESC_TRAP,0x08,(uint32_t*)isr128); //This is syscall
-	memset(_spec_isr_table,0,sizeof(_spec_isr_table));
+//	memset(_spec_isr_table,0,sizeof(_spec_isr_table));
 
 	pic_init();
 	asm volatile ("sti \n");
