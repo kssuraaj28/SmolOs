@@ -24,6 +24,7 @@ driver/serial.c \
 driver/vgatext.c \
 driver/pic.c \
 driver/pit.c \
+driver/pci.c \
 debug/qemu_print.c \
 debug/panic.c \
 common/string.c \

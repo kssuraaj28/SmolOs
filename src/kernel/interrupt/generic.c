@@ -13,7 +13,7 @@ void isr33(); void isr34(); void isr35(); void isr36(); void isr37(); void isr38
 void isr41(); void isr42(); void isr43(); void isr44(); void isr45(); void isr46(); void isr47(); 
 void isr128();
 
-specific_isr_t _spec_isr_table[MAX_INTERRUPT];
+specific_isr_t _spec_isr_table[MAX_INTERRUPT] = {0};
 
 void interrupt_init()
 {
@@ -45,7 +45,6 @@ void interrupt_init()
 	install_idt_ir(47,IDT_DESC_BIT32|IDT_DESC_PRESENT,0x08,(uint32_t*)isr47);
 	
 	install_idt_ir(0x80,IDT_DESC_BIT32|IDT_DESC_PRESENT|IDT_DESC_RING3|IDT_DESC_TRAP,0x08,(uint32_t*)isr128); //This is syscall
-//	memset(_spec_isr_table,0,sizeof(_spec_isr_table));
 
 	pic_init();
 	asm volatile ("sti \n");
@@ -54,14 +53,13 @@ void interrupt_init()
 void generic_interrupt_handler(interrupt_frame_t input)
 {
 	if(_spec_isr_table[input.vector_number]) _spec_isr_table[input.vector_number](&input);
-	else 
+	if(input.vector_number < IRQ_BASE) 
 	{
 		qemu_puts("\nException number:"); QEMU_HEX(input.vector_number);
 		qemu_puts("\nError code:"); QEMU_HEX(input.error_code);
 		qemu_puts("\nProgram counter:"); QEMU_HEX(input.cs);qemu_puts(":");QEMU_HEX(input.eip);
 		PANIC ("No specific interrupt handler");
 	}
-
 }
 void register_interrupt_handler(uint8_t num, specific_isr_t handler) 
 {

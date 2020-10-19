@@ -8,6 +8,7 @@
 #include <driver/serial.h>
 #include <driver/vgatext.h>
 #include <driver/pit.h>
+#include <driver/pci.h>
 #include <interrupt/generic.h>
 #include <debug/qemu_print.h>
 #include <debug/panic.h>
